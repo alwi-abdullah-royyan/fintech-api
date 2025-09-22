@@ -1,0 +1,294 @@
+Secara simpel, bro — yang **belum beres** dan perlu dituntaskan biar siap kirim:
+
+---
+
+### **1. Integrasi 2 Layanan Eksternal (Mock)**
+
+* **Payment Gateway Mock**:
+
+  * Endpoint untuk kirim payment request → dapet response sukses/gagal.
+  * Endpoint webhook untuk callback hasil pembayaran (dengan validasi HMAC signature).
+* **Notification Service Mock**:
+
+  * Simulasi kirim email/SMS setelah transaksi sukses.
+  * Bisa pakai dummy API atau service lokal.
+
+---
+
+### **2. Idempotency & Error Handling**
+
+* Pastikan **duplicate payment request** nggak bikin transaksi dobel → handle pakai `idempotency-key`.
+* Retry + circuit breaker untuk external API supaya nggak crash kalau payment gateway down.
+
+---
+
+### **3. Swagger Full Documentation**
+
+* Tambahin detail `@ApiTags`, `@ApiResponse`, `@ApiProperty` di semua endpoint.
+* Export `swagger.json` untuk dilampirin.
+
+---
+
+### **4. Testing**
+
+* Minimal **2 unit test untuk endpoint** sudah ada.
+* Bagusnya tambahin **e2e test** untuk flow lengkap:
+
+  * Buat customer → buat transaksi → simulate webhook → cek DB.
+
+---
+
+### **5. Database Migration & Seed**
+
+* Pastikan `prisma migrate` sudah jalan.
+* Optional seed data, misalnya 1 customer untuk testing.
+
+---
+
+### **6. Security Checklist**
+
+* Semua **secret** (JWT, DB, HMAC key) sudah di `.env` dan **tidak di-commit**.
+* Rate limiting atau mention Redis untuk mitigasi spam.
+* Audit log untuk transaksi.
+
+---
+
+### **7. CI/CD Finalisasi**
+
+* CI sudah jalan untuk test + build.
+* Belum ada step **deploy otomatis** → minimal tulis di README cara manual deploy.
+
+---
+
+### **8. README & ARCHITECTURE.md**
+
+* README harus jelas: cara run, test, migrate, swagger URL, env vars.
+* ARCHITECTURE.md jelasin kenapa pilih arsitektur itu dan gambarin flow singkat.
+
+---
+
+Kalau diringkas jadi **4 inti yang wajib ada sebelum kirim**:
+
+1. Mock external API **(payment & notification)**.
+2. **Swagger lengkap + export JSON**.
+3. **Unit test minimal 2 endpoint + e2e test sederhana**.
+4. **Dokumentasi jelas (README + ARCHITECTURE.md)**.
+
+Sisanya (rate limit, idempotency, CI deploy) bonus nilai plus.
+
+Oke bro, kita dokumentasiin step-by-step biar rapih dan jelas. Ini juga sekalian ngecek status project kita sekarang:
+
+---
+
+## **📘 Dokumentasi Project Fintech API**
+
+Mini-project API untuk mengelola data **nasabah (customers)**, **pembayaran (payments)**, dan **transaksi (transactions)** menggunakan **NestJS + TypeScript + PostgreSQL (Supabase)**.
+
+---
+
+### **1. Arsitektur**
+
+* **NestJS Modular Pattern**
+  Setiap domain (Customers, Payments, Transactions) dipisah dalam folder `src/module-name`.
+
+  * Controller → handle HTTP request
+  * Service → business logic + komunikasi ke database (via Prisma)
+  * DTO → data validation
+  * Entity/Interface → model data (optional jika pakai Prisma langsung)
+  * Prisma → ORM untuk PostgreSQL
+* Pattern ini scalable dan cocok untuk microservices.
+
+---
+
+### **2. Tech Stack**
+
+| Komponen     | Tech / Library            | Alasan                                  |
+| ------------ | ------------------------- | --------------------------------------- |
+| Backend      | NestJS (TypeScript)       | Modular, scalable, built-in DI          |
+| Database ORM | Prisma ORM                | Integrasi mudah dengan PostgreSQL       |
+| Database     | PostgreSQL (Supabase)     | Relational DB, cocok untuk fintech data |
+| Docs         | Swagger (NestJS Swagger)  | Auto generate API docs                  |
+| Testing      | Jest                      | Unit test bawaan NestJS                 |
+| Deployment   | Vercel / Railway / Render | Gratis & mudah integrasi CI/CD          |
+
+---
+
+### **3. PostgreSQL di Supabase**
+
+**Tujuan:** Supaya semua data persistent dan bisa dilihat via Supabase UI.
+
+#### Cara ambil DATABASE\_URL:
+
+1. Login ke [Supabase](https://supabase.com/).
+2. Pilih project.
+3. Masuk ke:
+
+   ```
+   Project Settings → Database → Connect
+   ```
+4. Salin connection string, contoh:
+
+   ```
+   postgresql://postgres:MyPassword@db.gzwaypttanbugujeswxt.supabase.co:5432/postgres
+   ```
+5. Simpan di `.env`:
+
+   ```env
+   DATABASE_URL="postgresql://postgres:MyPassword@db.gzwaypttanbugujeswxt.supabase.co:5432/postgres"
+   ```
+
+---
+
+### **4. Prisma Schema**
+
+File: `prisma/schema.prisma`
+
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id           String        @id @default(uuid())
+  name         String
+  email        String        @unique
+  createdAt    DateTime      @default(now())
+  transactions Transaction[]
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  customerId  String
+  amount      Int
+  currency    String
+  status      String
+  createdAt   DateTime @default(now())
+  customer    Customer @relation(fields: [customerId], references: [id])
+}
+```
+
+---
+
+### **5. Migrasi Prisma**
+
+Setelah `.env` benar, jalankan:
+
+```bash
+# Generate Prisma client
+npx prisma generate
+
+# Buat migrasi ke Supabase
+npx prisma migrate dev --name init
+```
+
+Hasil:
+
+* Table `Customer` dan `Transaction` otomatis muncul di Supabase.
+
+---
+
+### **6. Update Service ke Prisma**
+
+**Sekarang statusnya:**
+
+* Service masih pakai array lokal (in-memory).
+* **TODO:** Ubah ke Prisma supaya data tersimpan di database Supabase.
+
+#### Contoh implementasi `CustomersService`:
+
+```ts
+import { Injectable } from '@nestjs/common';
+import { PrismaClient } from '@prisma/client';
+import { CreateCustomerDto } from './dto/create-customer.dto';
+
+const prisma = new PrismaClient();
+
+@Injectable()
+export class CustomersService {
+  async create(dto: CreateCustomerDto) {
+    return prisma.customer.create({ data: dto });
+  }
+
+  async findAll() {
+    return prisma.customer.findMany({
+      include: { transactions: true },
+    });
+  }
+
+  async update(id: string, dto: Partial<CreateCustomerDto>) {
+    return prisma.customer.update({
+      where: { id },
+      data: dto,
+    });
+  }
+
+  async remove(id: string) {
+    return prisma.customer.delete({ where: { id } });
+  }
+}
+```
+
+---
+
+### **7. Swagger**
+
+Swagger otomatis tersedia setelah import `SwaggerModule` di `main.ts`:
+
+URL:
+
+```
+http://localhost:3000/api
+```
+
+Swagger menampilkan semua endpoint:
+
+* `/customers`
+* `/transactions`
+* `/payments`
+
+---
+
+### **8. Deployment Plan**
+
+* Gunakan **Vercel** untuk deploy API (gratis).
+* Database tetap di Supabase (gratis tier).
+* Tambahkan `.env` di Vercel dengan `DATABASE_URL`.
+* CI/CD pipeline otomatis build dan deploy tiap push ke GitHub.
+
+---
+
+### **9. Checklist Progress**
+
+| Task                                                  | Status                       |
+| ----------------------------------------------------- | ---------------------------- |
+| Setup NestJS project                                  | ✅                            |
+| Modular structure (Customers, Payments, Transactions) | ✅                            |
+| Prisma schema & migration                             | ✅                            |
+| CRUD Customers                                        | ✅                            |
+| CRUD Payments                                         | ✅                            |
+| CRUD Transactions                                     | ✅                            |
+| Prisma integration di Service                         | ❌ *Belum, masih array lokal* |
+| Swagger API Docs                                      | ✅                            |
+| Testing minimal 2 endpoint                            | ✅                            |
+| External API integration (Mock Payment Gateway)       | ✅                            |
+| Deployment gratis                                     | ❌ *Belum dikerjain*          |
+| CI/CD pipeline                                        | ❌ *Belum dikerjain*          |
+
+---
+
+### **10. Next Steps**
+
+1. Update semua service (`PaymentsService`, `TransactionsService`) ke Prisma.
+2. Deploy project ke Vercel.
+3. Setup CI/CD pipeline (GitHub Actions).
+4. Final testing di Postman untuk semua endpoint.
+5. Final dokumentasi dan kirim ke email recruiter.
+
+---
+
+Mau gue lanjut kerjain update service ke Prisma dulu, atau langsung fokus ke deployment dulu?
