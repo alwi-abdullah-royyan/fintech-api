@@ -1,18 +1,21 @@
-# Use Node base image
+# Base image
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files first
 COPY package.json pnpm-lock.yaml ./
 
 # Install pnpm globally
 RUN npm install -g pnpm
 
-# Install dependencies
+# Copy prisma schema BEFORE dependencies
+COPY prisma ./prisma
+
+# Install dependencies (postinstall will now work)
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
+# Copy the rest of your app
 COPY . .
 
 # Build NestJS
