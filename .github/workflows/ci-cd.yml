@@ -10,21 +10,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout repo
       - uses: actions/checkout@v3
 
+      # Step 2: Setup Node.js
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
           node-version: 18
 
+      # Step 3: Install pnpm globally
       - name: Install pnpm
         run: npm install -g pnpm
 
+      # Step 4: Install dependencies
       - name: Install dependencies
         run: pnpm install
 
+      # Step 4b: Ensure @nestjs/mapped-types is installed (fix build issue)
+      - name: Ensure @nestjs/mapped-types
+        run: pnpm add @nestjs/mapped-types@^2.1.0
+
+      # Step 5: Generate Prisma client
+      - name: Generate Prisma client
+        run: pnpm prisma generate
+
+      # Step 6: Run tests
       - name: Run tests
         run: pnpm test
 
+      # Step 7: Build project
       - name: Build project
         run: pnpm build
